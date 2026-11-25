@@ -149,11 +149,13 @@ func Libraries(ctx context.Context, classifier Classifier, includeTests bool, ig
 		lib := &Library{
 			LicensePath: licensePath,
 		}
+		var origModulePath string
 		for _, pkg := range pkgs {
 			lib.Packages = append(lib.Packages, pkg.PkgPath)
 			if lib.module == nil && pkg.Module != nil {
 				// All the sub packages should belong to the same module.
 				lib.module = newModule(pkg.Module)
+				origModulePath = pkg.Module.Path
 			}
 		}
 		if lib.module != nil && lib.module.Path != "" && lib.module.Dir == "" {
@@ -176,21 +178,12 @@ func Libraries(ctx context.Context, classifier Classifier, includeTests bool, ig
 				//
 				// These assumptions may change in the future,
 				// so we need to keep this updated with go tooling changes.
-				parentModDir := splits[0]
-				var parentPkg *packages.Package
-				for _, rootPkg := range rootPkgs {
-					if rootPkg.Module != nil && rootPkg.Module.Dir == parentModDir {
-						parentPkg = rootPkg
-						break
-					}
-				}
-				if parentPkg == nil {
-					klog.Warningf("cannot find parent package of vendored module %s", lib.module.Path)
-				} else {
-					// Vendored modules should be commited in the parent module, so it counts as part of the
-					// parent module.
-					lib.module = newModule(parentPkg.Module)
-				}
+				//
+				// Keep the vendored module's own path and version (from vendor/modules.txt),
+				// only fill in its directory. The vendor folder is laid out by the original
+				// module path, not by the path of a replacement.
+				vendorDir := lib.LicensePath[:strings.LastIndex(lib.LicensePath, "/vendor/")]
+				lib.module.Dir = filepath.Join(vendorDir, "vendor", filepath.FromSlash(origModulePath))
 			}
 		}
 		libraries = append(libraries, lib)
